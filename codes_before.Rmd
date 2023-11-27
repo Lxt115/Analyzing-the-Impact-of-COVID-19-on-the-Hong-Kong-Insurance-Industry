@@ -1,0 +1,389 @@
+---
+title: "PJ1"
+author: "ZHANG Xingheng"
+date: "2023/11/26"
+output: html_document
+---
+
+```{r q1,  warning=FALSE,echo=FALSE, include=FALSE}
+library(tseries)
+library(TSA)
+library(lmtest)
+library(forecast)
+library(fGarch)
+library(FinTS)
+library(rugarch)
+library(rio)
+```
+
+## data preprocessing
+
+```{r a, warning=FALSE}
+# read the data
+daily_ori <-read.csv(file="D:\\HKUST\\TS\\PJ\\data\\2318_HK.csv")
+daily <-read.csv(file="D:\\HKUST\\TS\\PJ\\data\\2318_HK.csv")
+daily$Date <- as.Date(daily$Date)
+daily$Close <- as.numeric(daily$Close)
+daily <- daily[1:1524,c(1,6)]
+
+# return and log return(percentage)
+d_return <- data.frame(Date = daily[,1][-1], return = diff(daily[,2]) / daily[-dim(daily)[1], 2])
+d_lreturn <- data.frame(Date = daily[,1][-1], logreturn = log(d_return[,2] + 1))
+d_return$return <- 100 * d_return$return 
+d_lreturn$logreturn <- 100 * d_lreturn$logreturn 
+```
+
+## data analysis
+```{r b, include=TRUE}
+# stationarity of price
+par(mfrow=c(1,2))
+## TS plot of price
+plot(daily, type = "l", xlab = "date", ylab = "price", main = "TS plot of price")
+## ACF of price
+acf(daily[,2], lag = 12, main = "ACF of price")
+## Augmented Dickey-Fuller test
+adf.test(daily[,2])
+
+# stationarity of log return
+par(mfrow=c(1,2))
+## TS plot of log return
+plot(x = d_lreturn, type = "l", xlab = "date", ylab = "log return", main = "TS plot of log return")
+abline(h = 0, col = 2, lty = 2, lwd = 2)
+## ACF of log return 
+acf(d_lreturn[,2],lag = 24,  main = "ACF of log return")
+## Augmented Dickey-Fuller test 
+adf.test(d_lreturn[,2])
+
+# Box-Ljung test of log return
+Box.test(d_lreturn[,2], lag = 12, type = "Ljung")    # lag = 12
+```
+
+
+## fit ARMA model, i.e. decide p and q
+```{r c, include=TRUE}
+# fit models
+
+par(mfrow=c(1,2))
+## ACF of log return 
+acf(d_lreturn[,2],lag = 24,  main = "ACF of log return")
+## ACF of log return 
+pacf(d_lreturn[,2],lag = 24,  main = "PACF of log return")
+## EACF of log return 
+eacf(d_lreturn[,2])
+## best fit ARMA model under AIC
+ARMA_dlr_fit1 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 11, start.q = 0, max.q = 11, stepwise = FALSE, ic = "aic", trace = T)  # best fit ARMA model under AIC is ARMA(5,0) with zero mean
+## best fit ARMA under BIC
+ARMA_dlr_fit2 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 11, start.q = 0, max.q =11,  stepwise = FALSE, ic = "bic", trace = T)  # best fit ARMA model under BIC is ARMA(0,0) with zero mean
+## best fit ARMA under AICc
+ARMA_dlr_fit3 <- auto.arima(d_lreturn[,2],start.p = 0, max.p =11, start.q = 0, max.q = 11, stepwise = FALSE, ic = "aicc", trace = T)  # best fit ARMA model under AICc is ARMA(5,0) with zero mean
+
+## best fit ARMA model under AIC
+ARMA_dlr_fit4 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 4, start.q = 0, max.q = 4, stepwise = FALSE, ic = "aic", trace = T)  # best fit ARMA model under AIC is ARMA(0,3) with zero mean
+## best fit ARMA under BIC
+ARMA_dlr_fit5 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 4, start.q = 0, max.q = 4,  stepwise = FALSE, ic = "bic", trace = T)  # best fit ARMA model under BIC is ARMA(0,0) with zero mean
+## best fit ARMA under AICc
+ARMA_dlr_fit6 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 4, start.q = 0, max.q = 4 , stepwise = FALSE, ic = "aicc", trace = T)  # best fit ARMA model under AICc is ARMA(0,3) with zero mean
+
+## best fit ARMA model under AIC
+ARMA_dlr_fit7 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 2, start.q = 0, max.q = 2, stepwise = FALSE, ic = "aic", trace = T)  # best fit ARMA model under AIC is ARMA(1,1) with non-zero mean
+## best fit ARMA under BIC
+ARMA_dlr_fit8 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 2, start.q = 0, max.q = 2,  stepwise = FALSE, ic = "bic", trace = T)  # best fit ARMA model under BIC is ARMA(0,0) with zero mean
+## best fit ARMA under AICc
+ARMA_dlr_fit9 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 2, start.q = 0, max.q = 2, stepwise = FALSE, ic = "aicc", trace = T)  # best fit ARMA model under AICc is ARMA(1,1) with non-zero mean
+
+# integrate ICs
+ARMA_dlr_ICs_11 <- cbind(c(ARMA_dlr_fit1$aic, ARMA_dlr_fit2$aic), c(ARMA_dlr_fit1$bic, ARMA_dlr_fit2$bic), c(ARMA_dlr_fit1$aicc, ARMA_dlr_fit2$aicc))
+
+```
+
+
+```{r c, include=TRUE}
+# fix some unsignificant parameters
+
+# alternative best ARIMA model is ARIMA(0,0,0), ARIMA(1,0,1), ARIMA(0,0,3), ARIMA(5,0,0)
+summary(ARMA_dlr_fit2)
+summary(ARMA_dlr_fit7)
+summary(ARMA_dlr_fit4)
+summary(ARMA_dlr_fit1)
+
+# check significance of parameters
+ARMA_00 <- ARMA_dlr_fit2
+ARMA_11 <- arima(d_lreturn[,2], order = c(1,0,1), include.mean = TRUE, fixed = c(NA, NA, 0))
+ARMA_03 <- arima(d_lreturn[,2], order = c(0,0,3), include.mean = FALSE, fixed = c(NA, 0, NA))
+ARMA_50 <- arima(d_lreturn[,2], order = c(5,0,0), include.mean = FALSE, fixed = c(NA, 0, NA, 0, NA))
+```
+
+
+## fit different GARCH(1,1)
+```{r d, include=TRUE}
+# ARCH affection test
+
+## calculate residuals
+res <- ARMA_00$residuals
+res <- ARMA_11$residuals
+res <- ARMA_03$residuals
+res <- ARMA_50$residuals
+
+## Box-Ljung test of squared residuals
+Box.test(res^2, lag = 12, type = "Ljung")   # lag = 12
+par(mfrow=c(1,3))
+## TS plot of squared residuals
+plot(res^2, type = "l", main = "TS plot of squared residuals")
+## ACF of squared residuals
+acf(res^2, main = "ACF of squared residuals")
+## PACF of squared residuals
+pacf(res^2, main = "PACF of squared residuals")
+## LM Arch test of residuals
+ArchTest(res,lags=12) 
+```
+
+
+
+```{r h, include=TRUE}
+# ARMA(p,q) + GARCH(1,1)
+spec_00 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(0,0), include.mean = FALSE),distribution.model = "std")
+fit_00 <- ugarchfit(spec_00, data = d_lreturn[,2])
+
+spec_11 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(1,1), include.mean = FALSE),distribution.model = "std")
+fit_11 <- ugarchfit(spec_11, data = d_lreturn[,2])
+
+spec_03 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(0, 3), include.mean = FALSE) , distribution.model = "std", fixed.pars = list(ma2 = 0))
+fit_03 <- ugarchfit(spec_03, data = d_lreturn[,2])
+
+spec_50 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(5, 0),include.mean = FALSE), distribution.model = "std", fixed.pars = list(ar2 = 0, ar4 = 0))
+fit_50 <- ugarchfit(spec_50, data = d_lreturn[,2])
+
+
+# ARMA(p,q) + eGARCH(1,1)
+spec_e00 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(0,0), include.mean = FALSE),distribution.model = "std")
+fit_e00 <- ugarchfit(spec_e00, data = d_lreturn[,2])
+
+spec_e11 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(1,1), include.mean = FALSE),distribution.model = "std")
+fit_e11 <- ugarchfit(spec_e11, data = d_lreturn[,2])
+
+spec_e03 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(0, 3), include.mean = FALSE) , distribution.model = "std", fixed.pars = list(ma2 = 0))
+fit_e03 <- ugarchfit(spec_e03, data = d_lreturn[,2])
+
+# spec_e50 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(5, 0),include.mean = FALSE), distribution.model = "std", fixed.pars = list(ar2 = 0, ar4 = 0))
+# fit_e50 <- ugarchfit(spec_e50, data = d_lreturn[,2])
+
+
+
+
+# ARMA(p,q) + iGARCH(1,1)
+spec_i00 <- ugarchspec(variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(0,0), include.mean = FALSE),distribution.model = "std")
+fit_i00 <- ugarchfit(spec_i00, data = d_lreturn[,2])
+
+spec_i11 <- ugarchspec(variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(1,1), include.mean = FALSE),distribution.model = "std")
+fit_i11 <- ugarchfit(spec_i11, data = d_lreturn[,2])
+
+spec_i03 <- ugarchspec(variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(0, 3), include.mean = FALSE) , distribution.model = "std", fixed.pars = list(ma2 = 0))
+fit_i03 <- ugarchfit(spec_i03, data = d_lreturn[,2])
+
+spec_i50 <- ugarchspec(variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),mean.model = list(armaOrder = c(5, 0),include.mean = FALSE), distribution.model = "std", fixed.pars = list(ar2 = 0, ar4 = 0))
+fit_i50 <- ugarchfit(spec_i50, data = d_lreturn[,2])
+
+show(fit_i03)
+
+```
+
+
+
+```{r h, include=TRUE}
+## integrate ICs for the above models
+ICs <-  cbind(infocriteria(fit_00),infocriteria(fit_11),infocriteria(fit_03),infocriteria(fit_50),infocriteria(fit_e00),infocriteria(fit_e11),infocriteria(fit_e03),infocriteria(fit_i00),infocriteria(fit_i11),infocriteria(fit_i03),infocriteria(fit_i50))
+ICs <- t(ICs)
+
+export(round(ICs,5),"clipboard")
+# fit_03 and fit_i03 are two best models
+```
+
+```{r d_plot_4, echo=FALSE}
+x_label <- c("AIC", "BIC", "SIC", "HQIC")
+
+# Increase margin space for the plot
+par(mar = c(5, 6, 4, 8))
+
+plot.new()
+
+# Plot the chart with swapped x-axis and y-axis
+plot(ICs[1,], type = "b", pch = 16, col = "burlywood", xlab = "Criterion", ylab = "value", ylim = c(min(ICs), max(ICs)), main = "Information Criteria of ARMA(p,q)+GARCH(1,1)(std)", xaxt = "n")
+lines(ICs[2, ], type = "b", pch = 16, col = "firebrick")
+lines(ICs[3, ], type = "b", pch = 16, col = "mediumseagreen")
+lines(ICs[4,], type = "b", pch = 16, col = "powderblue")
+lines(ICs[5,], type = "b", pch = 16, col = "palegreen")
+lines(ICs[6,], type = "b", pch = 16, col = "pink")
+lines(ICs[7,], type = "b", pch = 16, col = "orchid")
+lines(ICs[8,], type = "b", pch = 16, col = "lightsalmon")
+lines(ICs[9,], type = "b", pch = 16, col = "royalblue")
+lines(ICs[10,], type = "b", pch = 16, col = "lightslategrey")
+lines(ICs[11,], type = "b", pch = 16, col = "palevioletred")
+axis(1, at = 1:length(ICs[1,]), labels = x_label, tick = FALSE)
+
+
+# Add a legend outside the plot
+legend("topright", inset=c(-0.34,0),   legend = c("ARMA(0,0)+GARCH(1,1)", "ARMA(1,1)+GARCH(1,1)", "ARMA(0,3)+GARCH(1,1)", "ARMA(5,0)+GARCH(1,1)",
+                                                  "ARMA(0,0)+eGARCH(1,1)","ARMA(1,1)+eGARCH(1,1)", "ARMA(0,3)+eGARCH(1,1)",
+                                                  "ARMA(0,0)+iGARCH(1,1)", "ARMA(1,1)+iGARCH(1,1)", "ARMA(0,3)+iGARCH(1,1)", "ARMA(5,0)+iGARCH(1,1)"), 
+       col = c("burlywood", "firebrick", "mediumseagreen", "powderblue","palegreen","pink","orchid","lightsalmon","royalblue","lightslategrey","palevioletred"), cex = 0.65, pch = 16, xpd = TRUE, horiz = FALSE)
+
+```
+
+
+```{r j, include=TRUE}
+# model checking
+
+# ARMA(0,3) + GARCH(1,1)
+# standardize residual
+## compute standardize residual
+res_dlr <- residuals(fit_03, standardize=TRUE)
+## Box-Ljung test of standardize residual
+Box.test(res_dlr, lag = 12, type = "Ljung")    # lag = 12
+par(mfrow=c(1,3))
+## TS plot of standardize residual
+plot(res_dlr, type = "l", main = "TS plot of standardize residual")
+## ACF of standardize residual
+acf(res_dlr, main = "ACF of standardize residual")
+## PACF of standardize residual
+pacf(res_dlr, main = "PACF of standardize residual")
+
+# squared standardize residual
+## Box-Ljung test of squared standardize residual
+Box.test(res_dlr^2, lag = 12, type = "Ljung")    # lag = 12
+## TS plot of squared standardize residual
+plot(res_dlr^2, type = "l", main = "TS plot of squared standardize residual")
+## ACF of squared standardize residual
+acf(res_dlr^2, main = "ACF of squared standardize residual")
+## PACF of squared standardize residual
+pacf(res_dlr^2, main = "PACF of squared standardize residual")
+## LM Arch test of squared standardize residual
+ArchTest(res_dlr,lags=12)
+
+# ARMA(0,3) + iGARCH(1,1)
+# standardize residual
+## compute standardize residual
+res_dlr <- residuals(fit_i03, standardize=TRUE)
+## Box-Ljung test of standardize residual
+Box.test(res_dlr, lag = 12, type = "Ljung")    # lag = 12
+par(mfrow=c(1,3))
+## TS plot of standardize residual
+plot(res_dlr, type = "l", main = "TS plot of standardize residual")
+## ACF of standardize residual
+acf(res_dlr, main = "ACF of standardize residual")
+## PACF of standardize residual
+pacf(res_dlr, main = "PACF of standardize residual")
+
+# squared standardize residual
+## Box-Ljung test of squared standardize residual
+Box.test(res_dlr^2, lag = 12, type = "Ljung")    # lag = 12
+## TS plot of squared standardize residual
+plot(res_dlr^2, type = "l", main = "TS plot of squared standardize residual")
+## ACF of squared standardize residual
+acf(res_dlr^2, main = "ACF of squared standardize residual")
+## PACF of squared standardize residual
+pacf(res_dlr^2, main = "PACF of squared standardize residual")
+## LM Arch test of squared standardize residual
+ArchTest(res_dlr,lags=12)
+
+# ARMA(0,3) + iGARCH(1,1) is the best
+
+```
+
+```{r k, include=TRUE}
+# QQ plot
+par(mfrow=c(1,2))
+## QQ plot of log return
+qqnorm(d_lreturn[,2], main = "QQ plot of log return series")
+qqline(d_lreturn[,2], col=2)
+## QQ plot of residual
+qqnorm(res_dlr, main = "QQ plot of residual series")
+qqline(res_dlr, col=2)
+```
+
+## forecast log return series
+```{r l, include=TRUE}
+# Out-Sample Forecasting
+forecasts <- ugarchforecast(fit_i03, n.ahead = 10)
+point_forecasts <- as.numeric(forecasts@forecast$seriesFor)
+conditional_sigma <- as.numeric(forecasts@forecast$sigmaFor)
+forecast_intervals <- matrix(NA, nrow = length(conditional_sigma), ncol = 2)
+forecast_intervals[, 1] <- point_forecasts - 1.96 * conditional_sigma
+forecast_intervals[, 2] <- point_forecasts + 1.96 * conditional_sigma
+
+point_forecasts
+forecast_intervals[, 1]
+forecast_intervals[, 2]
+
+
+daily_11 <-read.csv(file="D:\\HKUST\\TS\\PJ\\data\\2318_HK.csv")
+daily_11$Date <- as.Date(daily_11$Date)
+daily_11$Close <- as.numeric(daily_11$Close)
+daily_11 <- daily_11[1524:1534,c(1,6)]
+
+d_return_11 <- data.frame(Date = daily_11[,1][-1], return = diff(daily_11[,2]) / daily_11[-dim(daily_11)[1], 2])
+d_lreturn_11 <- data.frame(Date = daily_11[,1][-1], logreturn = log(d_return_11[,2] + 1))
+d_lreturn_11$logreturn <- 100 * d_lreturn_11$logreturn
+real = append(d_lreturn[1523,2], d_lreturn_11[, 2])
+
+U=append(d_lreturn[1523,2], forecast_intervals[, 2])
+L=append(d_lreturn[1523,2], forecast_intervals[, 1])
+plot(1:50,c(d_lreturn[1484:1523,2], point_forecasts), ylim=c(-5, 5), 
+      type="l", ylab="", xlab="", main="Forecasting of log return")
+lines(40:50, append(d_lreturn[1523,2], point_forecasts), type="l", col="red")
+lines(40:50, real,type="l", col="green")
+lines(40:50, U,type="l", col="blue")
+lines(40:50, L,type="l", col="blue")
+legend(x = "topleft", c("confidence interval of prediction", "prediction","real"), lty=c(1,1), pch=".", 
+       col=c("blue", "red","green"))
+```
+
+## forecast price series
+```{r l, include=TRUE}
+# Out-Sample Forecasting
+forecasts <- ugarchforecast(fit_i03, n.ahead = 10)
+point_forecasts <- as.numeric(forecasts@forecast$seriesFor)
+fore_price <- daily[1524,2] * exp(cumsum(point_forecasts/100))
+
+
+real = append(daily[1524,2], daily_ori[1525:1534, 6])
+
+
+plot(1:50,c(daily[1485:1524,2], fore_price),  
+      type="l", ylab="", xlab="", ylim = c(72, 84),main="Forecasting of stock price")
+lines(40:50, real,type="l", col="green")
+lines(40:50, append(daily[1524,2], fore_price), type="l", col="red")
+legend(x = "topleft", c( "prediction", "real"), lty=c(1,1), pch=".", 
+       col=c("red","green"))
+```
+
+```{r lds, include=TRUE}
+plot(x = d_lreturn[,1], y = d_lreturn[,2], type = "l", xlab = "date", ylab = "log return")
+lines(x = d_lreturn[,1], y = fit_i03@fit$sigma, type = "l", col = 2, lwd =
+2)
+lines(x = d_lreturn[,1], y = -fit_i03@fit$sigma, type = "l", col = 2, lwd
+= 2)
+abline(h = 1.96*sd(d_lreturn[,2]), col = 4, lty = 2)
+abline(h = -1.96*sd(d_lreturn[,2]), col = 4, lty = 2)
+legend("bottomright", legend = c("percentage log return series", "95% confidence interval of volatility under ARMA(0,3)+iGARCH(1,1)
+", "95% confidence interval of volatility with no conditional variance"),
+col = c(1, 2, 4), lty=c(1, 1, 2), lwd = c(1, 2, 1), cex = 0.51, inset =
+0.01)
+
+
+```
+```{r h, include=TRUE}
+library(rugarch)
+library(xts)
+ts_obj <- xts(d_lreturn$logreturn, order.by = as.Date(d_lreturn$Date))
+
+spec <- ugarchspec(variance.model = list(model = "iGARCH", garchOrder = c(1,
+1)),
+mean.model = list(armaOrder = c(0, 3), include.mean = FALSE),
+distribution.model = "std", fixed.pars = list(ma2 = 0))
+fit <- ugarchfit(data = ts_obj, spec = spec, out.sample = 50)
+pred <- ugarchforecast(fit, n.ahead = 1, data = NULL, out.sample = 50, n.roll =
+50)
+pred@forecast$sigmaFor
+plot(pred)
+
+```
