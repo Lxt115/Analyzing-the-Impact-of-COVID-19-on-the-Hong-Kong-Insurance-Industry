@@ -1,0 +1,712 @@
+---
+title: "project"
+output: html_document
+date: "2023-11-26"
+---
+
+```{r pressure, echo=FALSE}
+library(FinTS)
+library(fGarch)
+library(rugarch)
+library(forecast)
+library(ggplot2)
+library(lmtest)
+library(tseries)
+daily <- read.csv("2318.HK.csv", header = TRUE)
+daily$Date <- as.Date(daily$Date)
+daily$Adj.Close <- as.numeric(daily$Adj.Close) 
+daily_data <- daily[1526:2466,c(1,6)]
+daily_data <- na.omit(daily_data)
+```
+
+```{r pressure, echo=FALSE}
+plot(daily_data,type = "l")
+```
+```{r pressure, echo=FALSE}
+d_return <- data.frame(Date = daily_data[,1][-1], return = diff(daily_data[,2]) / daily_data[-
+dim(daily_data)[1], 2]) 
+
+d_lreturn <- data.frame(Date = daily_data[,1][-1], logreturn = log(d_return[,2] + 1))
+
+d_return$return <- 100 * d_return$return # 乘以100(%)作为分析数据
+d_lreturn$logreturn <- 100 * d_lreturn$logreturn # 乘以100(%)作为分析数据
+
+plot(d_lreturn$logreturn,type="l")
+```
+
+```{r pressure, echo=FALSE}
+acf(d_lreturn$logreturn)
+pacf(d_lreturn$logreturn)
+```
+
+
+
+```{r pressure, echo=FALSE}
+Box.test(d_lreturn[,2], lag = 12, type = "Ljung")
+```
+```{r pressure, echo=FALSE}
+ARMA_dlr_fit1 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 2, start.q = 0,
+max.q = 2, stepwise = FALSE, ic = "aic", trace = T) # AIC信息准则下的最优模型是总体均值为0的ARMA(0,0)
+ARMA_dlr_fit2 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 2, start.q = 0,
+max.q = 2, stepwise = FALSE, ic = "bic", trace = T) # BIC信息准则下的最优模型是总体均值为0的ARMA(0,0)
+ARMA_dlr_fit3 <- auto.arima(d_lreturn[,2],start.p = 0, max.p = 2, start.q = 0,
+max.q = 2, stepwise = FALSE, ic = "aicc", trace = T) # AICc信息准则下的最优模型是总体均值为0的ARMA(0,0)
+```
+
+
+```{r pressure, echo=FALSE}
+# GARCH
+Box.test((d_lreturn[,2])^2, lag = 12, type = "Ljung")
+```
+
+```{r pressure, echo=FALSE}
+plot((d_lreturn[,2])^2,type = "l")
+```
+
+```{r pressure, echo=FALSE}
+acf((d_lreturn[,2])^2)
+```
+
+```{r pressure, echo=FALSE}
+pacf((d_lreturn[,2])^2)
+```
+
+```{r pressure, echo=FALSE}
+ArchTest(d_lreturn[,2],lags=12)
+```
+
+```{r pressure, echo=FALSE}
+# 拟合条件扰动为正态分布且不含均值项的GARCH(p,q)模型，p,q最大值均为2
+GARCH_dlr_fit1 <- garchFit(~garch(1,0), d_lreturn[,2], cond.dist = "norm", include.mean = FALSE)
+GARCH_dlr_fit2 <- garchFit(~garch(1,1), d_lreturn[,2], cond.dist = "norm", include.mean = FALSE)
+GARCH_dlr_fit3 <- garchFit(~garch(1,2), d_lreturn[,2], cond.dist = "norm", include.mean = FALSE)
+GARCH_dlr_fit4 <- garchFit(~garch(2,0), d_lreturn[,2], cond.dist = "norm", include.mean = FALSE)
+GARCH_dlr_fit5 <- garchFit(~garch(2,1), d_lreturn[,2], cond.dist = "norm", include.mean = FALSE)
+GARCH_dlr_fit6 <- garchFit(~garch(2,2), d_lreturn[,2], cond.dist = "norm", include.mean = FALSE)
+# 拟合条件扰动为正态分布且含有均值项的GARCH(p,q)模型，p,q最大值均为2
+GARCH_dlr_fit7 <- garchFit(~garch(1,0), d_lreturn[,2], cond.dist = "norm")
+GARCH_dlr_fit8 <- garchFit(~garch(1,1), d_lreturn[,2], cond.dist = "norm")
+GARCH_dlr_fit9 <- garchFit(~garch(1,2), d_lreturn[,2], cond.dist = "norm")
+GARCH_dlr_fit10 <- garchFit(~garch(2,0), d_lreturn[,2], cond.dist = "norm")
+GARCH_dlr_fit11 <- garchFit(~garch(2,1), d_lreturn[,2], cond.dist = "norm")
+GARCH_dlr_fit12 <- garchFit(~garch(2,2), d_lreturn[,2], cond.dist = "norm")
+
+GARCH_dlr_ICs_norm <-  rbind(GARCH_dlr_fit1@fit$ics, GARCH_dlr_fit2@fit$ics, GARCH_dlr_fit3@fit$ics, GARCH_dlr_fit4@fit$ics, GARCH_dlr_fit5@fit$ics, GARCH_dlr_fit6@fit$ics, GARCH_dlr_fit7@fit$ics, GARCH_dlr_fit8@fit$ics, GARCH_dlr_fit9@fit$ics, GARCH_dlr_fit10@fit$ics, GARCH_dlr_fit11@fit$ics, GARCH_dlr_fit12@fit$ics)
+```
+
+```{r pressure, echo=FALSE}
+x_label <- c("AIC", "BIC", "SIC", "HQIC")
+
+# Increase margin space for the plot
+par(mar = c(5, 6, 4, 8))
+
+plot.new()
+
+# Plot the chart with swapped x-axis and y-axis
+plot(GARCH_dlr_ICs_norm[1,], type = "b", pch = 16, col = "burlywood", xlab = "Criterion", ylab = "value", ylim = c(min(GARCH_dlr_ICs_norm), max(GARCH_dlr_ICs_norm)), main = "Information Criteria of GARCH(norm)", xaxt = "n")
+lines(GARCH_dlr_ICs_norm[2, ], type = "b", pch = 16, col = "firebrick")
+lines(GARCH_dlr_ICs_norm[3, ], type = "b", pch = 16, col = "mediumseagreen")
+lines(GARCH_dlr_ICs_norm[4,], type = "b", pch = 16, col = "powderblue")
+lines(GARCH_dlr_ICs_norm[5,], type = "b", pch = 16, col = "palegreen")
+lines(GARCH_dlr_ICs_norm[6,], type = "b", pch = 16, col = "pink")
+lines(GARCH_dlr_ICs_norm[7,], type = "b", pch = 16, col = "orchid")
+lines(GARCH_dlr_ICs_norm[8,], type = "b", pch = 16, col = "lightsalmon")
+lines(GARCH_dlr_ICs_norm[9,], type = "b", pch = 16, col = "royalblue")
+lines(GARCH_dlr_ICs_norm[10,], type = "b", pch = 16, col = "lightslategrey")
+lines(GARCH_dlr_ICs_norm[11,], type = "b", pch = 16, col = "palevioletred")
+lines(GARCH_dlr_ICs_norm[12,], type = "b", pch = 16, col = "gold")
+axis(1, at = 1:length(GARCH_dlr_ICs_norm[1,]), labels = x_label, tick = FALSE)
+
+# Set the coordinates for the legend outside the plot
+legend_x <- length(GARCH_dlr_ICs_norm[1,]) + 0.3
+legend_y <- mean(range(GARCH_dlr_ICs_norm)) +0.08
+
+# Add a legend outside the plot
+legend(legend_x, legend_y, legend = c("1", "2", "3", "4","5","6","7","8","9","10","11","12"), col = c("burlywood", "firebrick", "mediumseagreen", "powderblue","palegreen","pink","orchid","lightsalmon","royalblue","lightslategrey","palevioletred","gold"), pch = 16, xpd = TRUE, horiz = FALSE)
+
+```
+
+```{r pressure, echo=FALSE}
+# 拟合条件扰动为std分布且不含均值项的GARCH(p,q)模型，p,q最大值均为2
+GARCH_dlr_fit1_s <- garchFit(~garch(1,0), d_lreturn[,2], cond.dist = "std", include.mean = FALSE)
+GARCH_dlr_fit2_s <- garchFit(~garch(1,1), d_lreturn[,2], cond.dist = "std", include.mean = FALSE)
+GARCH_dlr_fit3_s <- garchFit(~garch(1,2), d_lreturn[,2], cond.dist = "std", include.mean = FALSE)
+GARCH_dlr_fit4_s <- garchFit(~garch(2,0), d_lreturn[,2], cond.dist = "std", include.mean = FALSE)
+GARCH_dlr_fit5_s <- garchFit(~garch(2,1), d_lreturn[,2], cond.dist = "std", include.mean = FALSE)
+GARCH_dlr_fit6_s <- garchFit(~garch(2,2), d_lreturn[,2], cond.dist = "std", include.mean = FALSE)
+# 拟合条件扰动为std分布且含有均值项的GARCH(p,q)模型，p,q最大值均为2
+GARCH_dlr_fit7_s <- garchFit(~garch(1,0), d_lreturn[,2], cond.dist = "std")
+GARCH_dlr_fit8_s <- garchFit(~garch(1,1), d_lreturn[,2], cond.dist = "std")
+GARCH_dlr_fit9_s <- garchFit(~garch(1,2), d_lreturn[,2], cond.dist = "std")
+GARCH_dlr_fit10_s <- garchFit(~garch(2,0), d_lreturn[,2], cond.dist = "std")
+GARCH_dlr_fit11_s <- garchFit(~garch(2,1), d_lreturn[,2], cond.dist = "std")
+GARCH_dlr_fit12_s <- garchFit(~garch(2,2), d_lreturn[,2], cond.dist = "std")
+
+GARCH_dlr_ICs_std <-  rbind(GARCH_dlr_fit1_s@fit$ics, GARCH_dlr_fit2_s@fit$ics, GARCH_dlr_fit3_s@fit$ics, GARCH_dlr_fit4_s@fit$ics, GARCH_dlr_fit5_s@fit$ics, GARCH_dlr_fit6_s@fit$ics, GARCH_dlr_fit7_s@fit$ics, GARCH_dlr_fit8_s@fit$ics, GARCH_dlr_fit9_s@fit$ics, GARCH_dlr_fit10_s@fit$ics, GARCH_dlr_fit11_s@fit$ics, GARCH_dlr_fit12_s@fit$ics)
+```
+
+```{r pressure, echo=FALSE}
+x_label <- c("AIC", "BIC", "SIC", "HQIC")
+
+# Increase margin space for the plot
+par(mar = c(5, 6, 4, 8))
+
+plot.new()
+
+# Plot the chart with swapped x-axis and y-axis
+plot(GARCH_dlr_ICs_std[1,], type = "b", pch = 16, col = "burlywood", xlab = "Criterion", ylab = "value", ylim = c(min(GARCH_dlr_ICs_std), max(GARCH_dlr_ICs_std)), main = "Information Criteria of GARCH(std)", xaxt = "n")
+lines(GARCH_dlr_ICs_std[2, ], type = "b", pch = 16, col = "firebrick")
+lines(GARCH_dlr_ICs_std[3, ], type = "b", pch = 16, col = "mediumseagreen")
+lines(GARCH_dlr_ICs_std[4,], type = "b", pch = 16, col = "powderblue")
+lines(GARCH_dlr_ICs_std[5,], type = "b", pch = 16, col = "palegreen")
+lines(GARCH_dlr_ICs_std[6,], type = "b", pch = 16, col = "pink")
+lines(GARCH_dlr_ICs_std[7,], type = "b", pch = 16, col = "orchid")
+lines(GARCH_dlr_ICs_std[8,], type = "b", pch = 16, col = "lightsalmon")
+lines(GARCH_dlr_ICs_std[9,], type = "b", pch = 16, col = "royalblue")
+lines(GARCH_dlr_ICs_std[10,], type = "b", pch = 16, col = "lightslategrey")
+lines(GARCH_dlr_ICs_std[11,], type = "b", pch = 16, col = "palevioletred")
+lines(GARCH_dlr_ICs_std[12,], type = "b", pch = 16, col = "gold")
+axis(1, at = 1:length(GARCH_dlr_ICs_std[1,]), labels = x_label, tick = FALSE)
+
+# Set the coordinates for the legend outside the plot
+legend_x <- length(GARCH_dlr_ICs_std[1,]) + 0.3
+legend_y <- mean(range(GARCH_dlr_ICs_std)) +0.06
+
+# Add a legend outside the plot
+legend(legend_x, legend_y, legend = c("1", "2", "3", "4","5","6","7","8","9","10","11","12"), col = c("burlywood", "firebrick", "mediumseagreen", "powderblue","palegreen","pink","orchid","lightsalmon","royalblue","lightslategrey","palevioletred","gold"), pch = 16, xpd = TRUE, horiz = FALSE)
+
+```
+
+GARCH_dlr_fit8_S garchFit(~garch(1,1), d_lreturn[,2], cond.dist = "std")
+GARCH_dlr_fit2_s garchFit(~garch(1,1), d_lreturn[,2], cond.dist = "std", include.mean = FALSE)
+red)
+
+
+```{r pressure, echo=FALSE}
+# 拟合条件扰动为ged分布且不含均值项的GARCH(p,q)模型，p,q最大值均为2
+# GARCH_dlr_fit1 <- garchFit(~garch(1,0), d_lreturn[,2], cond.dist = "ged", include.mean = FALSE)
+GARCH_dlr_fit2_g <- garchFit(~garch(1,1), d_lreturn[,2], cond.dist = "ged", include.mean = FALSE)
+GARCH_dlr_fit3_g <- garchFit(~garch(1,2), d_lreturn[,2], cond.dist = "ged", include.mean = FALSE)
+#GARCH_dlr_fit4 <- garchFit(~garch(2,0), d_lreturn[,2], cond.dist = "ged", include.mean = FALSE)
+GARCH_dlr_fit5_g <- garchFit(~garch(2,1), d_lreturn[,2], cond.dist = "ged", include.mean = FALSE)
+GARCH_dlr_fit6_g <- garchFit(~garch(2,2), d_lreturn[,2], cond.dist = "ged", include.mean = FALSE)
+# 拟合条件扰动为正态分布且含有均值项的GARCH(p,q)模型，p,q最大值均为2
+#GARCH_dlr_fit7 <- garchFit(~garch(1,0), d_lreturn[,2], cond.dist = "ged")
+GARCH_dlr_fit8_g <- garchFit(~garch(1,1), d_lreturn[,2], cond.dist = "ged")
+GARCH_dlr_fit9_g <- garchFit(~garch(1,2), d_lreturn[,2], cond.dist = "ged")
+#GARCH_dlr_fit10 <- garchFit(~garch(2,0), d_lreturn[,2], cond.dist = "ged")
+GARCH_dlr_fit11_g <- garchFit(~garch(2,1), d_lreturn[,2], cond.dist = "ged")
+GARCH_dlr_fit12_g <- garchFit(~garch(2,2), d_lreturn[,2], cond.dist = "ged")
+
+GARCH_dlr_ICs_ged <-  rbind(10, GARCH_dlr_fit2_g@fit$ics, GARCH_dlr_fit3_g@fit$ics, 10, GARCH_dlr_fit5_g@fit$ics, GARCH_dlr_fit6_g@fit$ics, 10, GARCH_dlr_fit8_g@fit$ics, GARCH_dlr_fit9_g@fit$ics, 10, GARCH_dlr_fit11_g@fit$ics, GARCH_dlr_fit12_g@fit$ics)
+```
+
+GARCH_dlr_fit2_g <- garchFit(~garch(1,1), d_lreturn[,2], cond.dist = "ged", include.mean = FALSE)
+GARCH_dlr_fit8_g <- garchFit(~garch(1,1), d_lreturn[,2], cond.dist = "ged")
+```{r pressure, echo=FALSE}
+x_label <- c("AIC", "BIC", "SIC", "HQIC")
+
+# Increase margin space for the plot
+par(mar = c(5, 6, 4, 8))
+
+plot.new()
+
+# Plot the chart with swapped x-axis and y-axis
+plot(GARCH_dlr_ICs_ged[2,], type = "b", pch = 16, col = "firebrick", xlab = "Criterion", ylab = "value", ylim = c(min(GARCH_dlr_ICs_ged), 4.293), main = "Information Criteria of GARCH(ged)", xaxt = "n")
+lines(GARCH_dlr_ICs_ged[3, ], type = "b", pch = 16, col = "mediumseagreen")
+lines(GARCH_dlr_ICs_ged[5,], type = "b", pch = 16, col = "palegreen")
+lines(GARCH_dlr_ICs_ged[6,], type = "b", pch = 16, col = "pink")
+lines(GARCH_dlr_ICs_ged[8,], type = "b", pch = 16, col = "lightsalmon")
+lines(GARCH_dlr_ICs_ged[9,], type = "b", pch = 16, col = "royalblue")
+lines(GARCH_dlr_ICs_ged[11,], type = "b", pch = 16, col = "palevioletred")
+lines(GARCH_dlr_ICs_ged[12,], type = "b", pch = 16, col = "gold")
+axis(1, at = 1:length(GARCH_dlr_ICs_ged[1,]), labels = x_label, tick = FALSE)
+
+# Set the coordinates for the legend outside the plot
+legend_x <- length(GARCH_dlr_ICs_ged[1,]) + 0.3
+legend_y <- mean(range(GARCH_dlr_ICs_ged)) +0.01
+
+# Add a legend outside the plot
+legend(legend_x, legend_y, legend = c("1", "2", "3", "4","5","6","7","8"), col = c( "firebrick", "mediumseagreen","palegreen","pink","lightsalmon","royalblue","palevioletred","gold"), pch = 16, xpd = TRUE, horiz = FALSE)
+
+```
+```{r pressure, echo=FALSE}
+fit1_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit2_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit3_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit4_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit5_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit6_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit7_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit8_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit9_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit10_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit11_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit12_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(2, 2)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+
+
+sGARCH_dlr_ICs <-  cbind(infocriteria(fit1_s),infocriteria(fit2_s),infocriteria(fit3_s),infocriteria(fit4_s),infocriteria(fit5_s),infocriteria(fit6_s),infocriteria(fit7_s),infocriteria(fit8_s),infocriteria(fit9_s),infocriteria(fit10_s),infocriteria(fit11_s),infocriteria(fit12_s))
+sGARCH_dlr_ICs <- t(sGARCH_dlr_ICs)
+```
+
+
+```{r pressure, echo=FALSE}
+fit1_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(5, 1)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit2_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(1, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit3_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(2, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit4_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(3, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit5_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(4, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit12_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(5, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit7_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit8_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(1, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit9_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(2, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit10_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(3, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit11_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(4, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit12_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(5, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+
+
+sGARCH_dlr_ICs <-  cbind(infocriteria(fit1_s),infocriteria(fit2_s),infocriteria(fit3_s),infocriteria(fit4_s),infocriteria(fit5_s),infocriteria(fit6_s),infocriteria(fit7_s),infocriteria(fit8_s),infocriteria(fit9_s),infocriteria(fit10_s),infocriteria(fit11_s),infocriteria(fit12_s))
+sGARCH_dlr_ICs <- t(sGARCH_dlr_ICs)
+```
+
+
+fit2_s <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0),include.mean = FALSE),
+  distribution.model = "std"), data = d_lreturn[,2])
+```{r pressure, echo=FALSE}
+x_label <- c("AIC", "BIC", "SIC", "HQIC")
+
+# Increase margin space for the plot
+par(mar = c(5, 6, 4, 8))
+
+plot.new()
+
+# Plot the chart with swapped x-axis and y-axis
+plot(sGARCH_dlr_ICs[1,], type = "b", pch = 16, col = "burlywood", xlab = "Criterion", ylab = "value", ylim = c(min(sGARCH_dlr_ICs), max(GARCH_dlr_ICs_norm)), main = "Information Criteria of sGARCH", xaxt = "n")
+lines(sGARCH_dlr_ICs[2, ], type = "b", pch = 16, col = "firebrick")
+lines(GARCH_dlr_ICs_norm[3, ], type = "b", pch = 16, col = "mediumseagreen")
+lines(GARCH_dlr_ICs_norm[4,], type = "b", pch = 16, col = "powderblue")
+lines(GARCH_dlr_ICs_norm[5,], type = "b", pch = 16, col = "palegreen")
+lines(GARCH_dlr_ICs_norm[6,], type = "b", pch = 16, col = "pink")
+lines(GARCH_dlr_ICs_norm[7,], type = "b", pch = 16, col = "orchid")
+lines(GARCH_dlr_ICs_norm[8,], type = "b", pch = 16, col = "lightsalmon")
+lines(GARCH_dlr_ICs_norm[9,], type = "b", pch = 16, col = "royalblue")
+lines(GARCH_dlr_ICs_norm[10,], type = "b", pch = 16, col = "lightslategrey")
+lines(GARCH_dlr_ICs_norm[11,], type = "b", pch = 16, col = "palevioletred")
+lines(GARCH_dlr_ICs_norm[12,], type = "b", pch = 16, col = "gold")
+axis(1, at = 1:length(GARCH_dlr_ICs_norm[1,]), labels = x_label, tick = FALSE)
+
+# Set the coordinates for the legend outside the plot
+legend_x <- length(GARCH_dlr_ICs_norm[1,]) + 0.3
+legend_y <- mean(range(GARCH_dlr_ICs_norm)) +0.08
+
+# Add a legend outside the plot
+legend(legend_x, legend_y, legend = c("1", "2", "3", "4","5","6","7","8","9","10","11","12"), col = c("burlywood", "firebrick", "mediumseagreen", "powderblue","palegreen","pink","orchid","lightsalmon","royalblue","lightslategrey","palevioletred","gold"), pch = 16, xpd = TRUE, horiz = FALSE)
+
+```
+
+```{r pressure, echo=FALSE}
+fit2_i <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0),include.mean = FALSE),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit3_i <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 2)),
+  mean.model = list(armaOrder = c(0, 0),include.mean = FALSE),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit5_i <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(2, 1)),
+  mean.model = list(armaOrder = c(0, 0),include.mean = FALSE),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit6_i <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(2, 2)),
+  mean.model = list(armaOrder = c(0, 0),include.mean = FALSE),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit8_i <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit9_i <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 2)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit11_i <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(2, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit12_i <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(2, 2)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+
+
+iGARCH_dlr_ICs <-  cbind(10,infocriteria(fit2_i),infocriteria(fit3_i),10,infocriteria(fit5_i),infocriteria(fit6_i),10,infocriteria(fit8_i),infocriteria(fit9_i),10,infocriteria(fit11_i),infocriteria(fit12_i))
+iGARCH_dlr_ICs <- t(iGARCH_dlr_ICs)
+```
+
+fit8_i <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+```{r pressure, echo=FALSE}
+x_label <- c("AIC", "BIC", "SIC", "HQIC")
+
+# Increase margin space for the plot
+par(mar = c(5, 6, 4, 8))
+
+plot.new()
+
+# Plot the chart with swapped x-axis and y-axis
+plot(iGARCH_dlr_ICs[2,], type = "b", pch = 16, col = "firebrick", xlab = "Criterion", ylab = "value", ylim = c(min(iGARCH_dlr_ICs), 4.27), main = "Information Criteria of iGARCH", xaxt = "n")
+lines(iGARCH_dlr_ICs[3, ], type = "b", pch = 16, col = "mediumseagreen")
+lines(iGARCH_dlr_ICs[5,], type = "b", pch = 16, col = "palegreen")
+lines(iGARCH_dlr_ICs[6,], type = "b", pch = 16, col = "pink")
+lines(iGARCH_dlr_ICs[8,], type = "b", pch = 16, col = "lightsalmon")
+lines(iGARCH_dlr_ICs[9,], type = "b", pch = 16, col = "royalblue")
+lines(iGARCH_dlr_ICs[11,], type = "b", pch = 16, col = "palevioletred")
+lines(iGARCH_dlr_ICs[12,], type = "b", pch = 16, col = "gold")
+axis(1, at = 1:length(iGARCH_dlr_ICs[1,]), labels = x_label, tick = FALSE)
+
+# Set the coordinates for the legend outside the plot
+legend_x <- length(iGARCH_dlr_ICs[1,]) + 0.3
+legend_y <- mean(range(iGARCH_dlr_ICs)) +0.01
+
+# Add a legend outside the plot
+legend(legend_x, legend_y, legend = c("1", "2", "3", "4","5","6","7","8"), col = c( "firebrick", "mediumseagreen","palegreen","pink","lightsalmon","royalblue","palevioletred","gold"), pch = 16, xpd = TRUE, horiz = FALSE)
+
+```
+```{r pressure, echo=FALSE}
+fit2_e <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0),include.mean = FALSE),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit3_e <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(1, 2)),
+  mean.model = list(armaOrder = c(0, 0),include.mean = FALSE),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit5_e <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(2, 1)),
+  mean.model = list(armaOrder = c(0, 0),include.mean = FALSE),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit6_e <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(2, 2)),
+  mean.model = list(armaOrder = c(0, 0),include.mean = FALSE),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit8_e <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit9_e <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(1, 2)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit11_e <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(2, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit12_e <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(2, 2)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+
+eGARCH_dlr_ICs <-  cbind(10,infocriteria(fit2_e),infocriteria(fit3_e),10,infocriteria(fit5_e),infocriteria(fit6_e),10,infocriteria(fit8_e),infocriteria(fit9_e),10,infocriteria(fit11_e),infocriteria(fit12_e))
+eGARCH_dlr_ICs <- t(eGARCH_dlr_ICs)
+```
+
+fit8_e <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+```{r pressure, echo=FALSE}
+x_label <- c("AIC", "BIC", "SIC", "HQIC")
+
+# Increase margin space for the plot
+par(mar = c(5, 6, 4, 8))
+
+plot.new()
+
+# Plot the chart with swapped x-axis and y-axis
+plot(eGARCH_dlr_ICs[2,], type = "b", pch = 16, col = "firebrick", xlab = "Criterion", ylab = "value", ylim = c(min(eGARCH_dlr_ICs), 4.285), main = "Information Criteria of eGARCH", xaxt = "n")
+lines(eGARCH_dlr_ICs[3, ], type = "b", pch = 16, col = "mediumseagreen")
+lines(eGARCH_dlr_ICs[5,], type = "b", pch = 16, col = "palegreen")
+lines(eGARCH_dlr_ICs[6,], type = "b", pch = 16, col = "pink")
+lines(eGARCH_dlr_ICs[8,], type = "b", pch = 16, col = "lightsalmon")
+lines(eGARCH_dlr_ICs[9,], type = "b", pch = 16, col = "royalblue")
+lines(eGARCH_dlr_ICs[11,], type = "b", pch = 16, col = "palevioletred")
+lines(eGARCH_dlr_ICs[12,], type = "b", pch = 16, col = "gold")
+axis(1, at = 1:length(eGARCH_dlr_ICs[1,]), labels = x_label, tick = FALSE)
+
+# Set the coordinates for the legend outside the plot
+legend_x <- length(eGARCH_dlr_ICs[1,]) + 0.3
+legend_y <- mean(range(eGARCH_dlr_ICs)) +0.01
+
+# Add a legend outside the plot
+legend(legend_x, legend_y, legend = c("1", "2", "3", "4","5","6","7","8"), col = c( "firebrick", "mediumseagreen","palegreen","pink","lightsalmon","royalblue","palevioletred","gold"), pch = 16, xpd = TRUE, horiz = FALSE)
+
+```
+
+```{r pressure, echo=FALSE}
+x_label <- c("AIC", "BIC", "SIC", "HQIC")
+ICs <- rbind(GARCH_dlr_ICs_norm[2,],GARCH_dlr_ICs_std[2, ],GARCH_dlr_ICs_std[8, ],GARCH_dlr_ICs_ged[2, ],GARCH_dlr_ICs_ged[8,],sGARCH_dlr_ICs[2,],iGARCH_dlr_ICs[8,],eGARCH_dlr_ICs[8,])
+# Increase margin space for the plot
+par(mar = c(5, 6, 4, 8))
+
+plot.new()
+
+# Plot the chart with swapped x-axis and y-axis
+plot(ICs[1,], type = "b", pch = 16, col = "firebrick", xlab = "Criterion", ylab = "value", ylim = c(min(ICs), max(ICs)), main = "Information Criteria of best models", xaxt = "n")
+lines(ICs[2, ], type = "b", pch = 16, col = "mediumseagreen")
+lines(ICs[3,], type = "b", pch = 16, col = "palegreen")
+lines(ICs[4,], type = "b", pch = 16, col = "pink")
+lines(ICs[5,], type = "b", pch = 16, col = "lightsalmon")
+lines(ICs[6,], type = "b", pch = 16, col = "royalblue")
+lines(ICs[7,], type = "b", pch = 16, col = "palevioletred")
+lines(ICs[8,], type = "b", pch = 16, col = "gold")
+axis(1, at = 1:length(ICs[1,]), labels = x_label, tick = FALSE)
+
+# Set the coordinates for the legend outside the plot
+legend_x <- length(ICs[1,]) + 0.3
+legend_y <- mean(range(ICs)) +0.05
+
+# Add a legend outside the plot
+legend(legend_x, legend_y, legend = c("1", "2", "3", "4","5","6","7","8"), col = c( "firebrick", "mediumseagreen","palegreen","pink","lightsalmon","royalblue","palevioletred","gold"), pch = 16, xpd = TRUE, horiz = FALSE)
+
+```
+eGARCH_dlr_ICs[8,]
+```{r pressure, echo=FALSE}
+# model checking
+# ARMA(0,0) + iGARCH(1,1)
+# standardize residual
+## compute standardize residual
+show(fit9_a)
+res_dlr <- residuals(fit9_a, standardize=TRUE)
+## Box-Ljung test of standardize residual
+Box.test(res_dlr, lag = 12, type = "Ljung")    # lag = 12
+## TS plot of standardize residual
+plot(res_dlr, type = "l", main = "TS plot of standardize residual")
+```
+
+```{r pressure, echo=FALSE}
+par(mfrow=c(1,2))
+## ACF of standardize residual
+acf(res_dlr, main = "ACF of standardize residual")
+## PACF of standardize residual
+pacf(res_dlr, main = "PACF of standardize residual")
+```
+
+```{r pressure, echo=FALSE}
+# squared standardize residual
+## Box-Ljung test of squared standardize residual
+Box.test(res_dlr^2, lag = 12, type = "Ljung")    # lag = 12
+## TS plot of squared standardize residual
+plot(res_dlr^2, type = "l", main = "TS plot of squared standardize residual")
+```
+
+```{r pressure, echo=FALSE}
+par(mfrow=c(1,2))
+## ACF of squared standardize res
+acf(res_dlr^2, main = "ACF of squared standardize res")
+## PACF of squared st
+pacf(res_dlr^2, main = "PACF of squared standardize res")
+## LM Arch test of squared standardize res
+ArchTest(res_dlr,lags=12)
+```
+
+```{r pressure, echo=FALSE}
+#12
+fit1_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std",fixed.pars = list(mu=0,ar2=0,ar3=0,ar4=0,ar5=0,omega=0)), data = d_lreturn[,2])
+fit2_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 4)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit3_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(2, 2)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit4_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(5, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit5_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit6_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 4)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit7_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(2, 2)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit8_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "eGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(5, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit9_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit10_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 4)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit11_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(2, 2)),
+  distribution.model = "std"), data = d_lreturn[,2])
+fit12_a <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(5, 0)),
+  distribution.model = "std"), data = d_lreturn[,2])
+
+
+allGARCH_dlr_ICs <-  cbind(infocriteria(fit1_a),infocriteria(fit2_a),infocriteria(fit3_a),infocriteria(fit4_a),infocriteria(fit5_a),infocriteria(fit6_a),infocriteria(fit7_a),infocriteria(fit8_a),infocriteria(fit9_a),infocriteria(fit10_a),infocriteria(fit11_a),infocriteria(fit12_a))
+allGARCH_dlr_ICs <- t(allGARCH_dlr_ICs)
+```
+
+```{r pressure, echo=FALSE}
+x_label <- c("AIC", "BIC", "SIC", "HQIC")
+
+# Increase margin space for the plot
+par(mar = c(5, 6, 4, 13))
+
+plot.new()
+
+# Plot the chart with swapped x-axis and y-axis
+plot(allGARCH_dlr_ICs[1,], type = "b", pch = 16, col = "burlywood", xlab = "Criterion", ylab = "value", ylim = c(min(allGARCH_dlr_ICs), max(allGARCH_dlr_ICs)), main = "Information Criteria of all GARCH(1,1) Model", xaxt = "n")
+lines(sGARCH_dlr_ICs[2, ], type = "b", pch = 16, col = "firebrick")
+lines(allGARCH_dlr_ICs[3, ], type = "b", pch = 16, col = "mediumseagreen")
+lines(allGARCH_dlr_ICs[4,], type = "b", pch = 16, col = "powderblue")
+lines(allGARCH_dlr_ICs[5,], type = "b", pch = 16, col = "palegreen")
+lines(allGARCH_dlr_ICs[6,], type = "b", pch = 16, col = "pink")
+lines(allGARCH_dlr_ICs[7,], type = "b", pch = 16, col = "orchid")
+lines(allGARCH_dlr_ICs[8,], type = "b", pch = 16, col = "lightsalmon")
+lines(allGARCH_dlr_ICs[9,], type = "b", pch = 16, col = "royalblue")
+lines(allGARCH_dlr_ICs[10,], type = "b", pch = 16, col = "lightslategrey")
+lines(allGARCH_dlr_ICs[11,], type = "b", pch = 16, col = "palevioletred")
+lines(allGARCH_dlr_ICs[12,], type = "b", pch = 16, col = "gold")
+axis(1, at = 1:length(allGARCH_dlr_ICs[1,]), labels = x_label, tick = FALSE)
+
+# Set the coordinates for the legend outside the plot
+legend_x <- length(allGARCH_dlr_ICs[1,]) + 0.3
+legend_y <- mean(range(allGARCH_dlr_ICs)) +0.033
+
+# Add a legend outside the plot
+legend(legend_x, legend_y, legend = c("ARMA(0,0)+sGARCH(1,1)", "ARMA(0,4)+sGARCH(1,1)", "ARMA(2,2)+sGARCH(1,1)", "ARMA(5,0)+sGARCH(1,1)","ARMA(0,0)+eGARCH(1,1)","ARMA(0,4)+eGARCH(1,1)","ARMA(2,2)+eGARCH(1,1)","ARMA(5,0)+eGARCH(1,1)","ARMA(0,0)+iGARCH(1,1)","ARMA(0,4)+iGARCH(1,1)","ARMA(2,2)+iGARCH(1,1)","ARMA(5,0)+iGARCH(1,1)"), col = c("burlywood", "firebrick", "mediumseagreen", "powderblue","palegreen","pink","orchid","lightsalmon","royalblue","lightslategrey","palevioletred","gold"), pch = 16, xpd = TRUE, horiz = FALSE)
+
+```
+```{r l, include=TRUE}
+daily_data_all <- daily[1:2466,c(1,6)]
+
+d_return_all <- data.frame(Date = daily_data_all[,1][-1], return = diff(daily_data_all[,2])/ daily_data_all[-
+dim(daily_data_all)[1], 2]) 
+
+d_lreturn_all <- data.frame(Date = daily_data_all[,1][-1], logreturn = log(d_return_all[,2] + 1))
+
+d_return_all$return <- 100 * d_return_all$return # 乘以100(%)作为分析数据
+d_lreturn_all$logreturn <- 100 * d_lreturn_all$logreturn # 乘以100(%)作为分析数据
+
+plot(d_lreturn_all$logreturn,type="l")
+
+fit1_all <- ugarchfit(ugarchspec(
+  variance.model = list(model = "iGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(11, 0)),
+  distribution.model = "std"), data = d_lreturn_all[,2])
+```
+
+```{r l, include=TRUE}
+# Out-Sample Forecasting
+forecasts <- ugarchforecast(fit9_a, n.ahead = 10)
+point_forecasts <- as.numeric(forecasts@forecast$seriesFor)
+
+forecasts_all <- ugarchforecast(fit1_all, n.ahead = 10)
+point_forecasts_all <- as.numeric(forecasts_all@forecast$seriesFor)
+
+fore_price <- daily_data[941,2] * exp(cumsum(point_forecasts/100))
+fore_price_all <- daily_data[941,2] * exp(cumsum(point_forecasts_all/100))
+
+plot.new()
+plot(1:50,c(daily_data[902:941,2], fore_price),  
+      type="l", ylab="", xlab="", ylim = c(35, 46),main="Forecasting of stock price")
+lines(40:50, append(daily_data[941,2], fore_price), type="l", col="red")
+lines(40:50, append(daily_data[941,2], fore_price_all), type="l", col="darkgreen")
+legend(x = "topright", c( "ARMA(0,0)+iGARCH(1,1)","ARMA(11,0)+iGARCH(1,1)"), lty=c(1,1), pch=".", 
+       col=c("red","darkgreen"))
+```
