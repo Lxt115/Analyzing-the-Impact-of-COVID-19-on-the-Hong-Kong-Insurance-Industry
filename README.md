@@ -1,6 +1,15 @@
-# Analyzing the Impact of COVID-19 on the Hong Kong Insurance Industry
-> A GARCH MODEL APPROACH
+# Impact of COVID-19 on Hong Kong Insurance Industry: GARCH Analysis
 
-We focus on one insurance company in Hong Kong and analyze its pre and post-COVID stock price changes. We will mainly use the GARCH model, which is a popular statistical model used to analyze time series data. We explored the different types of GARCH models, such as ARIMA-GARCH, IGARCH and EGARCH model, to understand the variance of the data. Moreover, we will examined whether there are seasonal effects exist in the medical insurance industries, we will show that there are yes/no such effects and provide an hypothesis to the reason behind.
+## 📋 Project Overview
+This study analyzes the impact of the COVID-19 pandemic on a Hong Kong insurance company's stock price volatility using GARCH models.
 
-![image](https://github.com/Lxt115/MSBD5006_Project/blob/main/image.png)
+## 🎯 Research Focus
+- Compare stock price volatility before and after COVID-19
+- Test different GARCH models: ARIMA-GARCH, IGARCH, EGARCH
+- Examine seasonal effects in medical insurance sector
+- Develop hypotheses to explain observed patterns
+
+## 📊 Methodology
+- **Data**: Single insurance company's stock price (2015-2022)
+- **Models**: GARCH family (ARIMA-GARCH, IGARCH, EGARCH)
+- **Analysis**: Volatility changes, seasonal patterns, structural breaks
